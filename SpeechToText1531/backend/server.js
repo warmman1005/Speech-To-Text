@@ -104,42 +104,38 @@ app.post('/upload-audio', upload.single('file'), async (req, res) => {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
 
-        const fileBuffer = req.file.buffer;
-        const tempFilePath = `${uploadDir}/${uuidv4()}.wav`;
-        fs.writeFileSync(tempFilePath, fileBuffer);
+        // 取得上傳檔案的原始副檔名
+        const originalExtension = path.extname(req.file.originalname);
+        const tempInputFilePath = `${uploadDir}/${uuidv4()}${originalExtension}`;
+        const tempWavFilePath = `${uploadDir}/${uuidv4()}.wav`;
 
-        const segmentDuration = 240;
-        const tempDir = await splitAudio(tempFilePath, segmentDuration);
-        const files = fs.readdirSync(tempDir);
-        let finalText = '';
+        // 將上傳的檔案儲存到臨時目錄
+        fs.writeFileSync(tempInputFilePath, req.file.buffer);
 
-        for (const file of files) {
-            const filePath = `${tempDir}/${file}`;
-            const stats = fs.statSync(filePath);
-            const fileSizeInBytes = stats.size;
-            const maxFileSize = 25 * 1024 * 1024;
+        // 使用 ffmpeg 將檔案轉換為 WAV 格式
+        await new Promise((resolve, reject) => {
+            ffmpeg(tempInputFilePath)
+                .toFormat('wav')
+                .output(tempWavFilePath)
+                .on('end', () => {
+                    console.log('File has been converted successfully');
+                    resolve();
+                })
+                .on('error', (err) => {
+                    console.error('An error occurred during file conversion:', err);
+                    reject(err);
+                })
+                .run();
+        });
 
-            if (fileSizeInBytes > maxFileSize) {
-                const furtherSplitDir = await splitAudio(filePath, segmentDuration / 2);
-                const furtherSplitFiles = fs.readdirSync(furtherSplitDir);
+        // 現在進行轉錄
+        const text = await transcribeAudio(tempWavFilePath);
 
-                for (const splitFile of furtherSplitFiles) {
-                    const splitFilePath = `${furtherSplitDir}/${splitFile}`;
-                    const text = await transcribeAudio(splitFilePath);
-                    finalText += text + ' ';
-                }
+        // 清理臨時檔案
+        fs.unlinkSync(tempInputFilePath);
+        fs.unlinkSync(tempWavFilePath);
 
-                fs.rmSync(furtherSplitDir, { recursive: true, force: true });
-            } else {
-                const text = await transcribeAudio(filePath);
-                finalText += text + ' ';
-            }
-        }
-
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        fs.unlinkSync(tempFilePath);
-
-        res.json({ text: finalText });
+        res.json({ text });
     } catch (error) {
         console.error('Error processing audio upload:', error);
         res.status(500).json({ error: error.message });
