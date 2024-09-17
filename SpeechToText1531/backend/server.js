@@ -13,6 +13,9 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
 import dotenv from 'dotenv';
+import franc from 'franc';
+import langs from 'langs';
+import OpenCC from 'opencc';
 
 dotenv.config();
 
@@ -79,6 +82,8 @@ async function transcribeAudio(filePath) {
     const formData = new FormData();
     formData.append('file', fs.createReadStream(filePath), 'audio.wav');
     formData.append('model', 'whisper-1');
+    // 不指定语言，让 API 自动检测
+    // formData.append('language', 'zh');
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
@@ -90,7 +95,26 @@ async function transcribeAudio(filePath) {
 
     const data = await response.json();
     if (response.ok) {
-        return data.text;
+        let transcribedText = data.text;
+
+        // 检测转录文本的语言
+        const langCode = franc(transcribedText, { minLength: 3 });
+
+        // 获取语言信息
+        let lang = langs.where("3", langCode);
+        if (lang) {
+            console.log(`Detected language: ${lang.name}`);
+        } else {
+            console.log('Could not detect language');
+        }
+
+        // 如果检测到是中文，则转换为繁体中文
+        if (lang && lang.name.toLowerCase().includes('chinese')) {
+            const converter = new OpenCC('s2t.json'); // 简体到繁体
+            transcribedText = await converter.convertPromise(transcribedText);
+        }
+
+        return transcribedText;
     } else {
         throw new Error(data.error.message);
     }
