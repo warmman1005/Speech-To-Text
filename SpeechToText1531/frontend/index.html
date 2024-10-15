@@ -464,28 +464,43 @@ async function polishText(text, language) {
             }
 
     
-            async function translateText(text, targetLanguage) {
+            async function translateText(text, targetLanguage, retryCount = 3) {
     const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKeyGoogle}`;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            q: text,
-            target: targetLanguage,
-            format: 'text'
-        })
-    });
 
-    const data = await response.json();
-    if (response.ok) {
-        return data.data.translations[0].translatedText;
-    } else {
-        console.error('Translation failed', data);
-        return text;
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                q: text,
+                target: targetLanguage,
+                format: 'text'
+            })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            return data.data.translations[0].translatedText;
+        } else if (response.status === 403 && data.error.message === 'User Rate Limit Exceeded') {
+            console.warn('Rate limit exceeded. Retrying...');
+            if (retryCount > 0) {
+                // Wait for 2 seconds before retrying
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return translateText(text, targetLanguage, retryCount - 1);
+            } else {
+                throw new Error('Rate limit exceeded. All retries failed.');
+            }
+        } else {
+            throw new Error(data.error.message || 'Translation failed');
+        }
+    } catch (error) {
+        console.error('Translation error:', error);
+        throw error;
     }
 }
+
 
 
     
