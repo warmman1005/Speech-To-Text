@@ -244,7 +244,7 @@
         let latestSummaryText = ''; // 用於存儲最新的摘要文本
         let latestHighlightText = ''; // 用於存儲最新的重點文本
 
-    const baseURL = 'https://ouo.onrender.com'; // 更改此行
+    const baseURL = 'https://nl-9.onrender.com'; // 更改此行
         const { jsPDF } = window.jspdf;
 
 
@@ -466,32 +466,26 @@ async function polishText(text, language) {
     
             async function translateText(text, targetLanguage) {
     const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKeyGoogle}`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            q: text,
+            target: targetLanguage,
+            format: 'text'
+        })
+    });
 
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                q: text,
-                target: targetLanguage,
-                format: 'text'
-            })
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-            return data.data.translations[0].translatedText;
-        } else {
-            throw new Error(data.error.message || 'Translation failed');
-        }
-    } catch (error) {
-        console.error('Translation error:', error);
-        throw error;
+    const data = await response.json();
+    if (response.ok) {
+        return data.data.translations[0].translatedText;
+    } else {
+        console.error('Translation failed', data);
+        return text;
     }
 }
-
 
 
     
@@ -805,38 +799,39 @@ addHighlight.addEventListener('click', async () => {
             
     
             translateBtn.addEventListener('click', async () => {
-    if (!apiKeyGoogle) {
-        console.error('Google API Key is not defined');
-        return;
-    }
 
-    const targetLanguage = document.getElementById('languageSelect').value;
-    const textAreas = document.querySelectorAll('textarea');
+                if (!apiKeyGoogle) {
+                console.error('Google API Key is not defined');
+                return;
+            }
 
-    if (targetLanguage === "original") {
-        textAreas.forEach((area, idx) => {
-            area.value = latestOriginalText;
-            if (idx === 1) area.value = latestModifiedText;
-            if (idx === 2) area.value = latestSummaryText;
-            if (idx === 3) area.value = latestHighlightText;
-        });
-        return;
-    }
-
-    // 保存初始的原文
-    if (initialOriginalTexts.length === 0) {
-        textAreas.forEach(area => {
-            initialOriginalTexts.push(area.value);
-        });
-    }
-
-    // 每次翻譯前都更新當前原文
-    currentOriginalTexts = [];
-    textAreas.forEach(area => {
-        currentOriginalTexts.push(area.value);
-    });
-
-    for (let area of textAreas) {
+                const targetLanguage = document.getElementById('languageSelect').value;
+                const textAreas = document.querySelectorAll('textarea');
+    
+                if (targetLanguage === "original") {
+                    textAreas.forEach((area, idx) => {
+                        area.value = latestOriginalText;
+                        if (idx === 1) area.value = latestModifiedText;
+                        if (idx === 2) area.value = latestSummaryText;
+                        if (idx === 3) area.value = latestHighlightText;
+                    });
+                    return;
+                }
+    
+                // 保存初始的原文
+                if (initialOriginalTexts.length === 0) {
+                    textAreas.forEach(area => {
+                        initialOriginalTexts.push(area.value);
+                    });
+                }
+    
+                // 每次翻譯前都更新當前原文
+                currentOriginalTexts = [];
+                textAreas.forEach(area => {
+                    currentOriginalTexts.push(area.value);
+                });
+    
+                for (let area of textAreas) {
         const textToTranslate = area.value;
         try {
             const translatedText = await translateText(textToTranslate, targetLanguage);
@@ -845,7 +840,6 @@ addHighlight.addEventListener('click', async () => {
             console.error('Translation failed', error);
         }
     }
-});
     
                 // 監聽原文選項變更
                 document.getElementById('languageSelect').addEventListener('change', (event) => {
